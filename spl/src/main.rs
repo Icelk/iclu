@@ -1,0 +1,3 @@
+//! SPLit
+
+fn main() {}

@@ -1,0 +1,43 @@
+[package]
+name = "iclu_common"
+version = "0.1.0"
+authors = ["Icelk <main@icelk.dev>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+
+[workspace]
+
+members = [
+    "ran",
+    "spl",
+    "byc",
+    "riz",
+    "common",
+]
+
+
+[[bin]]
+name = "ran"
+path = "src/ran.rs"
+
+[[bin]]
+name = "spl"
+path = "src/spl.rs"
+
+[[bin]]
+name = "byc"
+path = "src/byc.rs"
+
+[[bin]]
+name = "riz"
+path = "src/riz.rs"
+
+
+[profile.release]
+lto = "thin"
+debug = 0
+opt-level = "s"

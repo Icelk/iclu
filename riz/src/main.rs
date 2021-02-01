@@ -1,0 +1,3 @@
+//! Recursive sIZe
+
+fn main() {}
