@@ -7,6 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rand = "0.8.3"
 common = { path = "../common" }
+rand = "0.8.3"
 getopts = "0.2.21"

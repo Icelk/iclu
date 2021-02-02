@@ -3,6 +3,10 @@
 [[package]]
 name = "byc"
 version = "0.1.0"
+dependencies = [
+ "common",
+ "getopts",
+]
 
 [[package]]
 name = "cfg-if"
