@@ -15,8 +15,25 @@ They should not be overlapping or outside the range of a 64-bit integer.\n\
 They can be comma- or space separated, contain a starting and ending number with a hyphen in between \
 (e.g. '3..5,7..11' is equivalent to '3..5,  7..11')\n\
 If you want negative numbers, make sure to include -- before the ranges \
-(e.g. {prog} -- -3..-1)"
-, prog=program,);
+(e.g. {prog} -- -3..-1)\n\
+\n\
+Several hard-coded ranges are present.\n\
+ascii -> 32..127\n\
+ascii-ext -> [32..127), [128..255)\n\
+alphabet | letters | [a-zA-Z] -> [65, 91), [97, 123)\n\
+[a-z] -> [97, 123)\n\
+[A-Z] -> [65, 91)\n\
+numbers | [0-9] -> [48, 58)\n\
+password -> 33, [35..37], [39, 41], [43, 58], [63, 123], [125, 126]\n\
+i8 -> [-128..128)\n\
+u8 -> [0..256)\n\
+i16 -> [-32768..32768)\n\
+u16 -> [0..65536)\n\
+i32 -> [-2147483648..2147483648)\n\
+u32 -> [0..4294967296)\n\
+i64 -> [-9223372036854775808..9223372036854775807) // Has to be one smaller than max because of the representation.\n\
+u64 -> [0..9223372036854775807) // Not 2^64 since it's represented as an signed 64-bit integer.\n\
+", prog=program,);
     let usage = opts.usage(&brief);
     usage.print_exit()
 }
@@ -27,6 +44,21 @@ struct Range {
     to: i64,
 }
 impl Range {
+    /// Creates a range `[from..to)`
+    pub const fn new(from: i64, to: i64) -> Range {
+        Range { from, to }
+    }
+    /// Creates a range `[from..to]`
+    pub const fn new_inclusive(from: i64, to: i64) -> Range {
+        Range { from, to: to + 1 }
+    }
+    /// Creates a range of a single number. Same as `new(value, value + 1)`.
+    pub const fn single(value: i64) -> Range {
+        Range {
+            from: value,
+            to: value + 1,
+        }
+    }
     pub fn intersects(&self, other: &Self) -> bool {
         other.to > self.from && other.from < self.to
     }
@@ -117,6 +149,41 @@ impl ExitDisplay for RangeError {
     }
 }
 
+fn parse_ranges<'a, I: Iterator<Item = &'a str>>(ranges: I) -> Vec<Range> {
+    ranges
+        .map(|s| match s.trim() {
+            "ascii" => vec![Range::new(32, 127)],
+            "ascii-ext" => vec![Range::new(32, 127), Range::new(128, 255)],
+            "alphabet" | "letters" | "[a-zA-Z]" => vec![Range::new(65, 91), Range::new(97, 123)],
+            "[a-z]" => vec![Range::new(97, 123)],
+            "[A-Z]" => vec![Range::new(65, 91)],
+            "numbers" | "[0-9]" => vec![Range::new(48, 58)],
+            "password" => vec![
+                Range::single(33),
+                Range::new_inclusive(35, 37),
+                Range::new_inclusive(39, 41),
+                Range::new_inclusive(43, 58),
+                Range::new_inclusive(63, 123),
+                Range::new_inclusive(125, 126),
+            ],
+            "i8" => vec![Range::new(-128, 128)],
+            "u8" => vec![Range::new(0, 256)],
+            "i16" => vec![Range::new(-32768, 32768)],
+            "u16" => vec![Range::new(0, 65536)],
+            "i32" => vec![Range::new(-2147483648, 2147483648)],
+            "u32" => vec![Range::new(0, 4294967296)],
+            "i64" => vec![Range::new(-9223372036854775808, 9223372036854775807)], // Has to be one smaller than max because of the representation.
+            "u64" => vec![Range::new(0, 9223372036854775807)], // Not 2^64 since it's represented as an signed 64-bit integer.
+
+            _ => match s.parse::<Range>() {
+                Err(e) => e.print_exit(),
+                Ok(r) => vec![r],
+            },
+        })
+        .flatten()
+        .collect()
+}
+
 /// Returns the `value` clamped to the ranges.
 /// `value` is assumed to be zero-indexed and have a maximum of `ranges.fold(0, |acc, r| r.difference() + acc)` Will else return -1.
 /// `ranges` are assumed to be in order, with the smallest first. This does however not matter when the `value` is random.
@@ -167,17 +234,14 @@ fn main() {
         Err(_) => "Failed to parse amount of random numbers. See --help for usage.".print_exit(),
     };
 
-    let ranges: Vec<Range> = matches
-        .free
-        .iter()
-        .map(|a| a.split(","))
-        .flatten()
-        .filter(|s| !s.trim().is_empty())
-        .map(|s| match s.parse::<Range>() {
-            Err(e) => e.print_exit(),
-            Ok(r) => r,
-        })
-        .collect();
+    let ranges = parse_ranges(
+        matches
+            .free
+            .iter()
+            .map(|a| a.split(","))
+            .flatten()
+            .filter(|s| !s.trim().is_empty()),
+    );
 
     for (pos, range) in ranges.iter().enumerate() {
         for (cmp_pos, cmp_range) in ranges.iter().enumerate() {
