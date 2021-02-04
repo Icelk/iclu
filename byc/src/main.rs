@@ -21,25 +21,52 @@ fn main() {
     let program = args[0].as_str();
 
     let mut opts = getopts::Options::new();
-    opts.optflag("h", "help", "prints this help menu");
+    opts.optflag("", "help", "prints this help menu");
     opts.optopt(
         "s",
         "separator",
         "set the separator to split stdin with.",
         "",
     );
+    opts.optflag("b", "binary", "parses the input as binary");
+    opts.optflag("h", "hex", "parses the input as hexadecimal");
+    opts.optflag("d", "decimal", "parses the input as decimal");
+    opts.optopt("r", "base", "parses the input as the given base", "BASE");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => f.to_string().print_exit(),
     };
-    if matches.opt_present("h") {
+    if matches.opt_present("help") {
         print_usage(program, opts);
     }
     let separator = matches
         .opt_default("s", "\n")
         .map(Cow::Owned)
         .unwrap_or(Cow::Borrowed("\n"));
+    let base = {
+        let b = if matches.opt_present("b") { 1 } else { 0 };
+        let h = if matches.opt_present("h") { 1 } else { 0 };
+        let d = if matches.opt_present("d") { 1 } else { 0 };
+        let r = if matches.opt_present("r") { 1 } else { 0 };
+        if b + h + d + r > 1 {
+            "Flag `binary`, `hex`, `decimal`, and `base` are exclusive. See --help for more info."
+                .print_exit()
+        }
+        if b == 1 {
+            2
+        } else if h == 1 {
+            16
+        } else if d == 1 {
+            10
+        } else {
+            match matches.opt_get_default("r", 10) {
+                Err(_) => "Failed to parse custom base.".print_exit(),
+                Ok(b) if b < 2 || b > 36 => "Base is not in range 2-36.".print_exit(),
+                Ok(b) => b,
+            }
+        }
+    };
 
     let mut chars = String::with_capacity(512);
     let mut buffer = Vec::with_capacity(4096);
@@ -58,9 +85,13 @@ fn main() {
         if byte.is_empty() {
             continue;
         }
-        let int = match byte.parse() {
+        let int = match u32::from_str_radix(byte, base) {
             Ok(i) => i,
-            Err(_) => format!("Failed to parse '{}' to a integer.", byte).print_exit(),
+            Err(_) => format!(
+                "Failed to parse '{}' to a integer. Check the base you're using.",
+                byte
+            )
+            .print_exit(),
         };
         let char = match char::from_u32(int) {
             Some(c) => c,
