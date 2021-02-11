@@ -16,6 +16,7 @@ members = [
     "spl",
     "byc",
     "riz",
+    "corpl",
     "common",
 ]
 
