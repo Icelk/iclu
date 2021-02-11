@@ -10,10 +10,19 @@ enum OptionEnabled {
     Yes,
     No,
 }
+impl OptionEnabled {
+    pub fn from_bool(b: bool) -> Self {
+        match b {
+            true => Self::Yes,
+            false => Self::No,
+        }
+    }
+}
 
 enum Segment<'a> {
-    Section(&'a str),
+    Section(&'a [u8]),
     Option(OptionEnabled),
+    None,
 }
 
 pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
@@ -66,15 +75,11 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
         }
     };
 
-    let mut in_section = false;
-    let mut in_option = false;
-    let mut section_common_string: &[u8] = b"";
-    let mut option_enabled = false;
+    let mut state = Segment::None;
     let mut output = Vec::with_capacity(config.len() * 2);
 
     for line in lines {
         let line_trimmed = trim(line);
-
         if line_trimmed.len() >= comment.len() + 1 + 5 + 1
             && line_trimmed.starts_with(comment)
             && line_trimmed[comment.len()..].starts_with(b" CORPL ")
@@ -82,70 +87,86 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
             let start = comment.len() + 1 + 5 + 1;
 
             if line_trimmed[start..].starts_with(b"end") {
-                in_section = false;
-                in_option = false;
+                state = Segment::None;
             } else if line_trimmed[start..].starts_with(b"section ") {
                 let start = start + 8;
-                section_common_string = trim_last(&line_trimmed[start..]);
 
-                if section_common_string.is_empty() {
+                let sec_str = trim_last(&line_trimmed[start..]);
+
+                if sec_str.is_empty() {
                     eprintln!("Found a section with no replacement! Does no lines have anything in common, then append it to the section line and remove it from all the following.");
                 }
 
-                in_section = true;
+                state = Segment::Section(sec_str);
             } else if line_trimmed[start..].starts_with(b"option ") {
                 let start = start + 7;
                 let option = &line_trimmed[start..];
-                option_enabled = enabled.iter().any(|e| e.as_bytes() == option);
-                in_option = true;
+                state = Segment::Option(OptionEnabled::from_bool(
+                    enabled.iter().any(|e| e.as_bytes() == option),
+                ));
             }
-        } else if in_section {
-            let last = get_last(line, comment);
-            let activate = enabled.iter().any(|e| e.as_bytes() == last);
-            let start = first_non_whitespace(line);
-            let currently_active =
-                !(line[start..].starts_with(comment) && line[start + comment.len()] == 32);
+        } else {
+            match state {
+                Segment::Section(seg_str) => {
+                    let last = get_last(line, comment);
+                    let activate = enabled.iter().any(|e| e.as_bytes() == last);
+                    let start = first_non_whitespace(line);
+                    let currently_active =
+                        !(line[start..].starts_with(comment) && line[start + comment.len()] == 32);
 
-            if currently_active == activate {
-                // Do noting!
-            } else if !activate {
-                if line[start..].starts_with(section_common_string) {
-                    // Do stuff
-                    output.extend_from_slice(&line[..start]);
-                    output.extend_from_slice(comment);
-                    output.push(32);
-                    output.extend_from_slice(&line[start + section_common_string.len()..]);
-                    output.extend_from_slice(line_ending);
-                    continue;
-                } else {
-                    eprintln!("Common string of section not present! Ignoring line.")
+                    if currently_active == activate {
+                        // Do noting!
+                    } else if !activate {
+                        if line[start..].starts_with(seg_str) {
+                            // Do stuff
+                            output.extend_from_slice(&line[..start]);
+                            output.extend_from_slice(comment);
+                            output.push(32);
+                            output.extend_from_slice(&line[start + seg_str.len()..]);
+                            output.extend_from_slice(line_ending);
+                            continue;
+                        } else {
+                            eprintln!("Common string of section not present! Ignoring line.")
+                        }
+                    } else if activate {
+                        output.extend_from_slice(&line[..start]);
+                        output.extend_from_slice(seg_str);
+                        output.extend_from_slice(&line[start + comment.len() + 1..]);
+                        output.extend_from_slice(line_ending);
+                        continue;
+                    }
                 }
-            } else if activate {
-                output.extend_from_slice(&line[..start]);
-                output.extend_from_slice(section_common_string);
-                output.extend_from_slice(&line[start + comment.len() + 1..]);
-                output.extend_from_slice(line_ending);
-                continue;
-            }
-        } else if in_option {
-            let start = first_non_whitespace(line);
-            let currently_active =
-                !(line[start..].starts_with(comment) && line[start + comment.len()] == 32);
+                Segment::Option(ref enabled) => {
+                    let start = first_non_whitespace(line);
+                    let currently_active =
+                        !(line[start..].starts_with(comment) && line[start + comment.len()] == 32);
 
-            if currently_active == option_enabled {
-                // Do nothing
-            } else if !option_enabled {
-                output.extend_from_slice(&line[..start]);
-                output.extend_from_slice(comment);
-                output.push(32);
-                output.extend_from_slice(&line[start..]);
-                output.extend_from_slice(line_ending);
-                continue;
-            } else if option_enabled {
-                output.extend_from_slice(&line[..start]);
-                output.extend_from_slice(&line[start + comment.len() + 1..]);
-                output.extend_from_slice(line_ending);
-                continue;
+                    match enabled {
+                        OptionEnabled::Yes if currently_active => {
+                            // Do nothing
+                        }
+                        OptionEnabled::No if !currently_active => {
+                            // Same here
+                        }
+                        OptionEnabled::No => {
+                            output.extend_from_slice(&line[..start]);
+                            output.extend_from_slice(comment);
+                            output.push(32);
+                            output.extend_from_slice(&line[start..]);
+                            output.extend_from_slice(line_ending);
+                            continue;
+                        }
+                        OptionEnabled::Yes => {
+                            output.extend_from_slice(&line[..start]);
+                            output.extend_from_slice(&line[start + comment.len() + 1..]);
+                            output.extend_from_slice(line_ending);
+                            continue;
+                        }
+                    }
+                }
+                Segment::None => {
+                    // Do nothing
+                }
             }
         }
         output.extend_from_slice(line);
