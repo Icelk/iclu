@@ -28,7 +28,7 @@ enum Segment<'a> {
 pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
     let mut file = match OpenOptions::new().read(true).write(true).open(path) {
         Ok(f) => f,
-        Err(_) => "Failed to open config.".print_exit(),
+        Err(_) => "Failed to open config file. Check input path.".print_exit(),
     };
     let mut config = Vec::with_capacity(4096);
     match file.read_to_end(&mut config) {
