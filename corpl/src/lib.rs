@@ -6,6 +6,26 @@ use std::{
 
 use common::ExitDisplay;
 
+#[derive(Debug, Clone, Copy)]
+pub struct Comment<'a> {
+    open: &'a [u8],
+    close: Option<&'a [u8]>,
+}
+impl<'a> Comment<'a> {
+    pub fn maybe_whole(open: Option<&'a [u8]>, close: Option<&'a [u8]>) -> Option<Self> {
+        match open {
+            Some(open) => Some(Self { open, close }),
+            None => None,
+        }
+    }
+    pub fn open(&self) -> &[u8] {
+        self.open
+    }
+    pub fn close(&self) -> Option<&[u8]> {
+        self.close
+    }
+}
+
 enum OptionEnabled {
     Yes,
     No,
@@ -25,15 +45,14 @@ enum Segment<'a> {
     None,
 }
 
-pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
+pub fn process_file(path: &Path, comment: Option<Comment>, enabled: &[&str]) {
     let mut file = match OpenOptions::new().read(true).write(true).open(path) {
         Ok(f) => f,
         Err(_) => "Failed to open config file. Check input path.".print_exit(),
     };
     let mut config = Vec::with_capacity(4096);
-    match file.read_to_end(&mut config) {
-        Err(_) => "Failed to read file.".print_exit(),
-        Ok(_) => {}
+    if file.read_to_end(&mut config).is_err() {
+        "Failed to read file.".print_exit()
     };
     let line_ending = get_line_ending(&config);
     let mut lines = get_lines(&config).peekable();
@@ -48,7 +67,9 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
             None
         }
     }
-    let comment = match get_common_comments(&config).or(comment) {
+    let end_comment = comment.as_ref().map(Comment::close).flatten();
+    let comment = match get_common_comments(&config).or_else(|| comment.as_ref().map(Comment::open))
+    {
         Some(c) => c,
         None => {
             let first_line = match lines.peek() {
@@ -80,6 +101,7 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
 
     for line in lines {
         let line_trimmed = trim(line);
+        #[allow(clippy::int_plus_one)]
         if line_trimmed.len() >= comment.len() + 1 + 5 + 1
             && line_trimmed.starts_with(comment)
             && line_trimmed[comment.len()..].starts_with(b" CORPL ")
@@ -98,9 +120,17 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
                 }
 
                 state = Segment::Section(sec_str);
+                if end_comment.is_some() {
+                    eprintln!("End comment is not compatible with sections for now.");
+                    state = Segment::None;
+                }
             } else if line_trimmed[start..].starts_with(b"option ") {
                 let start = start + 7;
-                let option = &line_trimmed[start..];
+                let end = match end_comment.as_ref() {
+                    Some(c) => line_trimmed.len() - c.len() - 1,
+                    None => line_trimmed.len(),
+                };
+                let option = &line_trimmed[start..end];
                 state = Segment::Option(OptionEnabled::from_bool(
                     enabled.iter().any(|e| e.as_bytes() == option),
                 ));
@@ -108,32 +138,34 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
         } else {
             match state {
                 Segment::Section(seg_str) => {
-                    let last = get_last(line, comment);
-                    let activate = enabled.iter().any(|e| e.as_bytes() == last);
-                    let start = first_non_whitespace(line);
-                    let currently_active =
-                        !(line[start..].starts_with(comment) && line[start + comment.len()] == 32);
+                    if end_comment.is_none() {
+                        let last = get_last(line, comment);
+                        let activate = enabled.iter().any(|e| e.as_bytes() == last);
+                        let start = first_non_whitespace(line);
+                        let currently_active = !(line[start..].starts_with(comment)
+                            && line[start + comment.len()] == 32);
 
-                    if currently_active == activate {
-                        // Do noting!
-                    } else if !activate {
-                        if line[start..].starts_with(seg_str) {
-                            // Do stuff
+                        if currently_active == activate {
+                            // Do noting!
+                        } else if !activate {
+                            if line[start..].starts_with(seg_str) {
+                                // Do stuff
+                                output.extend_from_slice(&line[..start]);
+                                output.extend_from_slice(comment);
+                                output.push(32);
+                                output.extend_from_slice(&line[start + seg_str.len()..]);
+                                output.extend_from_slice(line_ending);
+                                continue;
+                            } else {
+                                eprintln!("Common string of section not present! Ignoring line.")
+                            }
+                        } else if activate {
                             output.extend_from_slice(&line[..start]);
-                            output.extend_from_slice(comment);
-                            output.push(32);
-                            output.extend_from_slice(&line[start + seg_str.len()..]);
+                            output.extend_from_slice(seg_str);
+                            output.extend_from_slice(&line[start + comment.len() + 1..]);
                             output.extend_from_slice(line_ending);
                             continue;
-                        } else {
-                            eprintln!("Common string of section not present! Ignoring line.")
                         }
-                    } else if activate {
-                        output.extend_from_slice(&line[..start]);
-                        output.extend_from_slice(seg_str);
-                        output.extend_from_slice(&line[start + comment.len() + 1..]);
-                        output.extend_from_slice(line_ending);
-                        continue;
                     }
                 }
                 Segment::Option(ref enabled) => {
@@ -153,12 +185,28 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
                             output.extend_from_slice(comment);
                             output.push(32);
                             output.extend_from_slice(&line[start..]);
+                            if let Some(comment) = end_comment {
+                                output.push(32);
+                                output.extend_from_slice(comment);
+                            }
                             output.extend_from_slice(line_ending);
                             continue;
                         }
                         OptionEnabled::Yes => {
                             output.extend_from_slice(&line[..start]);
-                            output.extend_from_slice(&line[start + comment.len() + 1..]);
+                            match end_comment {
+                                None => {
+                                    output.extend_from_slice(&line[start + comment.len() + 1..])
+                                }
+                                Some(end_comment) => {
+                                    let end = last_non_whitespace(line);
+                                    output.extend_from_slice(
+                                        &line[start + comment.len() + 1
+                                            ..end - end_comment.len() - 1],
+                                    );
+                                    output.extend_from_slice(&line[end..]);
+                                }
+                            }
                             output.extend_from_slice(line_ending);
                             continue;
                         }
@@ -230,10 +278,7 @@ fn get_lines(bytes: &[u8]) -> Lines {
 }
 
 fn is_whitespace(byte: u8) -> bool {
-    match byte {
-        32 | 9..=13 => true,
-        _ => false,
-    }
+    matches!(byte, 32 | 9..=13)
 }
 fn trim(bytes: &[u8]) -> &[u8] {
     let mut s = 0;
@@ -276,6 +321,17 @@ fn first_non_whitespace(bytes: &[u8]) -> usize {
     }
     s
 }
+fn last_non_whitespace(bytes: &[u8]) -> usize {
+    let mut e = 0;
+
+    for (pos, byte) in bytes.iter().enumerate().rev() {
+        if !is_whitespace(*byte) {
+            e = pos + 1;
+            break;
+        }
+    }
+    e
+}
 
 fn get_last<'a>(bytes: &'a [u8], to_match: &[u8]) -> &'a [u8] {
     for (pos, bytes_sub) in bytes.windows(to_match.len() + 1).enumerate().rev() {
@@ -283,7 +339,7 @@ fn get_last<'a>(bytes: &'a [u8], to_match: &[u8]) -> &'a [u8] {
             return &bytes[pos + to_match.len() + 1..];
         }
     }
-    return &bytes[0..0];
+    b""
 }
 
 fn get_line_ending(bytes: &[u8]) -> &'static [u8] {
