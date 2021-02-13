@@ -114,7 +114,15 @@ pub fn process_file(
         {
             let start = comment.len() + 1 + 5 + 1;
 
-            if line_trimmed[start..].starts_with(b"end ") {
+            let is_end = match end_comment.as_ref() {
+                None => &line_trimmed[start..] == b"end",
+                Some(end_comment) => {
+                    &line_trimmed[start..start + 4] == b"end "
+                        && &line_trimmed[start + 4..] == *end_comment
+                }
+            };
+
+            if is_end {
                 state = Segment::None;
             } else if line_trimmed[start..].starts_with(b"section ") {
                 let start = start + 8;
