@@ -38,7 +38,7 @@ since the `-c` option overrides all unrecognised comment strings.")
             Arg::with_name("c")
             .help("Override comment string found in file. Can be used if the program failed to register it.")
                 .short("c")
-                .long("comment-string")
+                .long("comment")
                 .takes_value(true))
         .arg(
             Arg::with_name("closing-comment")
