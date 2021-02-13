@@ -59,8 +59,13 @@ since the `-c` option overrides all unrecognised comment strings.")
         let closing = matches.value_of("closing-comment").map(str::as_bytes);
         Comment::maybe_whole(primary, closing)
     };
+    let comment_len = if matches.is_present("l") {
+        None
+    } else {
+        Some(4)
+    };
 
     for file in matches.values_of("CONFIG").unwrap() {
-        lib::process_file(Path::new(file), comment, &enabled);
+        lib::process_file(Path::new(file), comment, &enabled, comment_len);
     }
 }

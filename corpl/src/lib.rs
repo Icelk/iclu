@@ -45,7 +45,12 @@ enum Segment<'a> {
     None,
 }
 
-pub fn process_file(path: &Path, comment: Option<Comment>, enabled: &[&str]) {
+pub fn process_file(
+    path: &Path,
+    comment: Option<Comment>,
+    enabled: &[&str],
+    max_comment_len: Option<usize>,
+) {
     let mut file = match OpenOptions::new().read(true).write(true).open(path) {
         Ok(f) => f,
         Err(_) => "Failed to open config file. Check input path.".print_exit(),
@@ -76,12 +81,13 @@ pub fn process_file(path: &Path, comment: Option<Comment>, enabled: &[&str]) {
                 Some(l) => *l,
                 None => "File too short; could not determine comment character.".print_exit(),
             };
-            if first_line
-                .split(|b| is_whitespace(*b))
-                .next()
-                .unwrap()
-                .len()
-                <= 4
+            if max_comment_len.is_none()
+                || first_line
+                    .split(|b| is_whitespace(*b))
+                    .next()
+                    .unwrap()
+                    .len()
+                    <= max_comment_len.unwrap()
             {
                 let comment = first_line.split(|b| b == &32).next().unwrap();
                 eprintln!(
