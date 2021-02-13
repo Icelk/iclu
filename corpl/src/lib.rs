@@ -86,7 +86,7 @@ pub fn process_file(path: &Path, comment: Option<&[u8]>, enabled: &[&str]) {
         {
             let start = comment.len() + 1 + 5 + 1;
 
-            if line_trimmed[start..].starts_with(b"end") {
+            if line_trimmed[start..].starts_with(b"end ") {
                 state = Segment::None;
             } else if line_trimmed[start..].starts_with(b"section ") {
                 let start = start + 8;
