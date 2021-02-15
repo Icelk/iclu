@@ -5,6 +5,13 @@
 Iclu are a set of command line utilities to fill in the gaps of the command line. I regularly use all of these to simplify common tasks.
 
 
+# Examples
+
+The `ran` and `byc` are used in the [pass](`pass.sh`) script.
+
+For examples of the `corpl`, see [my theme change script](https://github.com/Iselk/dotfiles/blob/main/scripts/theme-change.sh) and [my Polybar configuration](https://github.com/Iselk/dotfiles/blob/main/config/polybar.ini)
+
+
 # Features
 
 If you want another feature (or binary), open an issue and I'll make it if it sounds like a good idea.
