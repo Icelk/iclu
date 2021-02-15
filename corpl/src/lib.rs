@@ -155,7 +155,7 @@ pub fn process_file(
                 Segment::Section(seg_str) => {
                     if end_comment.is_none() {
                         let last = get_last(line, comment);
-                        let activate = enabled.iter().any(|e| e.as_bytes() == last);
+                        let activate = enabled.iter().any(|e| Some(e.as_bytes()) == last);
                         let start = first_non_whitespace(line);
                         let currently_active = !(line[start..].starts_with(comment)
                             && line[start + comment.len()] == 32);
@@ -321,13 +321,13 @@ fn last_non_whitespace(bytes: &[u8]) -> usize {
     e
 }
 
-fn get_last<'a>(bytes: &'a [u8], to_match: &[u8]) -> &'a [u8] {
+fn get_last<'a>(bytes: &'a [u8], to_match: &[u8]) -> Option<&'a [u8]> {
     for (pos, bytes_sub) in bytes.windows(to_match.len() + 1).enumerate().rev() {
         if &bytes_sub[..to_match.len()] == to_match && bytes_sub[to_match.len()] == 32 {
-            return &bytes[pos + to_match.len() + 1..];
+            return Some(&bytes[pos + to_match.len() + 1..]);
         }
     }
-    b""
+    None
 }
 
 fn get_line_ending(bytes: &[u8]) -> &'static [u8] {
