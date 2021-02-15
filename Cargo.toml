@@ -1,5 +1,5 @@
 [package]
-name = "iclu_common"
+name = "iclu"
 version = "0.1.0"
 authors = ["Icelk <main@icelk.dev>"]
 edition = "2018"
