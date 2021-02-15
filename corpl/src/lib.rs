@@ -296,34 +296,7 @@ fn is_whitespace(byte: u8) -> bool {
     matches!(byte, 32 | 9..=13)
 }
 fn trim(bytes: &[u8]) -> &[u8] {
-    let mut s = 0;
-    let mut e = bytes.len();
-
-    for (pos, byte) in bytes.iter().enumerate() {
-        if !is_whitespace(*byte) {
-            s = pos;
-            break;
-        }
-    }
-    for (pos, byte) in bytes.iter().enumerate().rev() {
-        if !is_whitespace(*byte) {
-            e = pos + 1;
-            break;
-        }
-    }
-    &bytes[s..e]
-}
-fn trim_last(bytes: &[u8]) -> &[u8] {
-    let mut e = 0;
-
-    for (pos, byte) in bytes.iter().enumerate().rev() {
-        if !is_whitespace(*byte) {
-            e = pos + 1;
-            break;
-        }
-    }
-
-    &bytes[..e]
+    &bytes[first_non_whitespace(bytes)..last_non_whitespace(bytes)]
 }
 fn first_non_whitespace(bytes: &[u8]) -> usize {
     let mut s = 0;
