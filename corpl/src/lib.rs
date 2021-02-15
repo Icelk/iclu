@@ -152,7 +152,7 @@ pub fn process_file(
             }
         } else {
             match state {
-                Segment::Section(seg_str) => {
+                Segment::Section(seg_str) if !line_trimmed.is_empty() => {
                     if end_comment.is_none() {
                         let last = get_last(line, comment);
                         let activate = enabled.iter().any(|e| Some(e.as_bytes()) == last);
@@ -183,7 +183,7 @@ pub fn process_file(
                         }
                     }
                 }
-                Segment::Option(ref enabled) => {
+                Segment::Option(ref enabled) if !line_trimmed.is_empty() => {
                     let start = first_non_whitespace(line);
                     let currently_active =
                         !(line[start..].starts_with(comment) && line[start + comment.len()] == 32);
@@ -227,7 +227,7 @@ pub fn process_file(
                         }
                     }
                 }
-                Segment::None => {
+                _ => {
                     // Do nothing
                 }
             }
