@@ -125,9 +125,10 @@ pub fn process_file(
             if is_end {
                 state = Segment::None;
             } else if line_trimmed[start..].starts_with(b"section ") {
-                let start = start + 8;
+                let trimmed_start = first_non_whitespace(line);
+                let start = trimmed_start + start + 8;
 
-                let sec_str = trim_last(&line_trimmed[start..]);
+                let sec_str = &line[start..];
 
                 if sec_str.is_empty() {
                     eprintln!("Found a section with no replacement! Does no lines have anything in common, then append it to the section line and remove it from all the following.");
