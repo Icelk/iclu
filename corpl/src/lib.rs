@@ -13,10 +13,7 @@ pub struct Comment<'a> {
 }
 impl<'a> Comment<'a> {
     pub fn maybe_whole(open: Option<&'a [u8]>, close: Option<&'a [u8]>) -> Option<Self> {
-        match open {
-            Some(open) => Some(Self { open, close }),
-            None => None,
-        }
+        open.map(|open| Self { open, close })
     }
     pub fn open(&self) -> &[u8] {
         self.open
@@ -146,9 +143,18 @@ pub fn process_file(
                     None => line_trimmed.len(),
                 };
                 let option = &line_trimmed[start..end];
-                state = Segment::Option(OptionEnabled::from_bool(
-                    enabled.iter().any(|e| e.as_bytes() == option),
-                ));
+                let options = common::slice_split(option, b" && ");
+                let mut option_enabled = true;
+                for option in options {
+                    let trimmed_option = option.strip_prefix(b"!").unwrap_or(option);
+                    let contains = enabled.iter().any(|e| e.as_bytes() == trimmed_option);
+                    let negate = option.starts_with(b"!");
+                    if (negate && contains) || (!negate && !contains) {
+                        option_enabled = false;
+                        break;
+                    }
+                }
+                state = Segment::Option(OptionEnabled::from_bool(option_enabled));
             }
         } else {
             match state {
