@@ -88,12 +88,12 @@ pub fn process_file(
             {
                 let comment = first_line.split(|b| b == &32).next().unwrap();
                 eprintln!(
-                    "Using uncommon comment: '{}'",
+                    "Continuing with uncommon comment: '{}'",
                     String::from_utf8_lossy(comment)
                 );
                 comment
             } else {
-                "Failed to get comment string. Please enter it, and only it, as the first line or supply the `-c` option with the comment string."
+                format!("Failed to get comment string in {}. Please enter it, and only it, as the first line or supply the `-c` option with the comment string.", path.display())
                     .print_exit()
             }
         }
