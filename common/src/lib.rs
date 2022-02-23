@@ -1,4 +1,6 @@
-use std::io::{stdin, Read};
+use std::borrow::Cow;
+use std::fmt::{self, Display, Debug};
+use std::io::{self, stdin, Read};
 
 pub trait ExitDisplay {
     /// The function to print when exiting because of this type.
@@ -17,6 +19,12 @@ pub trait ExitDisplay {
     fn print_exit(&self) -> ! {
         eprintln!("{}", self.print());
         std::process::exit(1)
+    }
+    fn into_print_exit(self) -> !
+    where
+        Self: Sized,
+    {
+        self.print_exit()
     }
 }
 
@@ -43,6 +51,11 @@ impl ExitDisplay for String {
     }
 }
 impl ExitDisplay for &str {
+    fn print(&self) -> String {
+        self.to_string()
+    }
+}
+impl ExitDisplay for io::Error {
     fn print(&self) -> String {
         self.to_string()
     }
@@ -111,6 +124,9 @@ impl<T, F: FnMut(&[T]) -> SliceSplitPredicateResult> SliceSplitPredicate<T> for 
         self(rest)
     }
 }
+/// Enables splitting of any [`SliceSplitPredicate`] for the `slice`.
+///
+/// This enables splitting a slice when another slice occurs, as you do with [`str::split`].
 pub fn slice_split<T, P: SliceSplitPredicate<T>>(
     slice: &[T],
     predicate: P,
