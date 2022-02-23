@@ -16,6 +16,7 @@ For examples of the `corpl`, see [my theme change script](https://github.com/Ice
 - byc - byte conversion, takes integers and turns them into Unicode characters
 - corpl - smart commenter, can comment and uncomment scripts/config files to implement light-weight setting sets, such as themes
 - shc - shell convert, turns (basic) Unix scripts into Windows Batch scripts
+- spl - split input and joint output, while using streams for best performance
 
 If you want another feature (or binary), open an issue and I'll make it if it sounds like a good idea.
 

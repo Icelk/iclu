@@ -10,7 +10,8 @@ use common::ExitDisplay;
 fn main() {
     let command = clap::command!();
     let command = command
-        .long_about("Splits incoming data and joins it with a specified separator.")
+        .long_about("Splits incoming data and joins it with a specified separator.\n\
+        Uses streams for best performance.")
         .arg(
             Arg::new("null")
                 .short('0')
