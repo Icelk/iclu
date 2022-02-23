@@ -144,26 +144,27 @@ pub struct SliceSplit<'a, T, Predicate: SliceSplitPredicate<T>> {
     predicate: Predicate,
     slice: &'a [T],
 }
-impl<'a, T, Predicate: SliceSplitPredicate<T>> Iterator for SliceSplit<'a, T, Predicate> {
+impl<'a, T: Debug, Predicate: SliceSplitPredicate<T>> Iterator for SliceSplit<'a, T, Predicate> {
     type Item = &'a [T];
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if self.index + 1 >= self.slice.len() {
-                if self.last_split < self.slice.len() {
+                if self.last_split <= self.slice.len() {
+                    // println!("Self slice {:?}",  self.slice);
                     let slice = &self.slice[self.last_split..];
 
-                    self.last_split = self.slice.len();
+                    self.last_split = self.slice.len()+1;
 
-                    return Some(slice)
+                    return Some(slice);
                 }
                 return None;
             }
             if self.last_split <= self.index {
                 match self.predicate.matches(&self.slice[self.index..]) {
                     SliceSplitPredicateResult::Match { length } => {
-                        let slice = &self.slice[self.last_split..self.index + 1];
+                        let slice = &self.slice[self.last_split..self.index];
 
-                        self.last_split += length;
+                        self.last_split = self.index+length;
                         return Some(slice);
                     }
                     SliceSplitPredicateResult::Continue => {}
