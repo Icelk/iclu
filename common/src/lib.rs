@@ -174,3 +174,119 @@ impl<'a, T: Debug, Predicate: SliceSplitPredicate<T>> Iterator for SliceSplit<'a
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EscapeError {
+    InvalidCharacter,
+    InvalidEscape,
+}
+impl Display for EscapeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidEscape => {
+                write!(f, "escape was invalid. Available are: \\n, \\t, \\r, \\\\, \\0, \\', \\\", \\x<2 hex digits>, \\u{{<up to 6 hex digits>}}")
+            }
+            Self::InvalidCharacter => {
+                write!(
+                    f,
+                    "the character you inputted (after \\x or \\u) isn't valid in UTF-8"
+                )
+            }
+        }
+    }
+}
+/// Parses `s` and resolves any `\<special character>`.
+///
+/// - `\n` -> newline
+/// - `\t` -> tab
+/// - `\r` -> carriage return
+/// - `\\` -> backslash
+/// - `\0` -> null
+/// - `\'` -> '
+/// - `\"` -> "
+/// - `\x<2 hex digits>` -> corresponding ASCII character
+/// - `\u{<1..=6 hex digits>}` -> corresponding Unicode character
+///
+/// This will return [`EscapeError::InvalidCharacter`] if a character couldn't be constructed from
+/// the input.
+/// [`EscapeError::InvalidEscape`] is returned is an invalid character was found after a `\`.
+pub fn parse_escaped(s: &str) -> Result<Cow<'_, str>, EscapeError> {
+    if s.contains('\\') {
+        let mut string = String::with_capacity(s.len());
+        let mut skip = 0;
+        for (idx, c) in s.char_indices() {
+            if skip > 0 {
+                skip -= 1;
+                continue;
+            }
+            if c == '\\' {
+                let s = &s[idx..];
+                let first_char = s.chars().nth(1).ok_or(EscapeError::InvalidEscape)?;
+                skip = match first_char {
+                    'n' => {
+                        string.push('\n');
+                        1
+                    }
+                    't' => {
+                        string.push('\t');
+                        1
+                    }
+                    'r' => {
+                        string.push('\r');
+                        1
+                    }
+                    '\\' => {
+                        string.push('\\');
+                        1
+                    }
+                    '0' => {
+                        string.push('\0');
+                        1
+                    }
+                    '\'' => {
+                        string.push('\'');
+                        1
+                    }
+                    '"' => {
+                        string.push('"');
+                        1
+                    }
+                    'x' => {
+                        let digits = s.get(2..=3).ok_or(EscapeError::InvalidCharacter)?;
+                        debug_assert_eq!(digits.as_bytes().len(), 2);
+                        let number = u32::from_str_radix(digits, 16)
+                            .map_err(|_| EscapeError::InvalidCharacter)?;
+                        let c = char::from_u32(number).ok_or(EscapeError::InvalidCharacter)?;
+                        string.push(c);
+                        3
+                    }
+                    'u' => {
+                        let closing = s.find('}');
+                        let closing = if let Some(c) = closing {
+                            c - 2 // the opening and `u` are two bytes
+                        } else {
+                            return Err(EscapeError::InvalidCharacter);
+                        };
+                        if s.as_bytes().get(2) != Some(&b'{') || closing > 6 {
+                            return Err(EscapeError::InvalidCharacter);
+                        }
+                        // ok, since we found `closing` in slice.
+                        let digits = &s[3..closing + 2];
+                        let number = u32::from_str_radix(digits, 16)
+                            .map_err(|_| EscapeError::InvalidCharacter)?;
+                        let c = char::from_u32(number).ok_or(EscapeError::InvalidCharacter)?;
+                        string.push(c);
+                        2 + closing
+                    }
+
+                    _ => return Err(EscapeError::InvalidEscape),
+                };
+            } else {
+                string.push(c)
+            }
+        }
+        Ok(Cow::Owned(string))
+    } else {
+        Ok(Cow::Borrowed(s))
+    }
+}
