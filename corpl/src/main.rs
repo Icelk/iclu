@@ -32,7 +32,8 @@ fn main() {
                 .help("Which section to enable. Can be multiple.")
                 .short('e')
                 .long("enabled")
-                .num_args(1..),
+                .action(ArgAction::Append)
+                .num_args(1),
         )
         .arg(
             Arg::new("long-comment")
@@ -72,17 +73,24 @@ fn main() {
                 .short('d')
                 .long("disabled")
                 .help("Sections to explicitly disable. Implies `keep`")
-                .num_args(1..),
+                .action(ArgAction::Append)
+                .num_args(1),
         );
 
     let matches = app.get_matches();
 
     let enabled: HashSet<_> = match matches.get_many::<String>("enabled") {
-        Some(enabled) => enabled.map(|s| s.as_bytes()).collect(),
+        Some(enabled) => enabled
+            .flat_map(|s| s.split(','))
+            .map(|s| s.trim().as_bytes())
+            .collect(),
         None => HashSet::new(),
     };
     let disabled: HashSet<_> = match matches.get_many::<String>("disabled") {
-        Some(disabled) => disabled.map(|s| s.as_bytes()).collect(),
+        Some(disabled) => disabled
+            .flat_map(|s| s.split(','))
+            .map(|s| s.trim().as_bytes())
+            .collect(),
         None => HashSet::new(),
     };
     let keep = matches.get_flag("keep");
