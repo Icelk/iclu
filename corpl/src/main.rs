@@ -28,10 +28,10 @@ fn main() {
                 .num_args(1..),
         )
         .arg(
-            Arg::new("enabled")
+            Arg::new("enable")
                 .help("Which section to enable. Can be multiple.")
                 .short('e')
-                .long("enabled")
+                .long("enable")
                 .action(ArgAction::Append)
                 .num_args(1),
         )
@@ -69,9 +69,9 @@ fn main() {
                 .help("Keep current settings"),
         )
         .arg(
-            Arg::new("disabled")
+            Arg::new("disable")
                 .short('d')
-                .long("disabled")
+                .long("disable")
                 .help("Sections to explicitly disable. Implies `keep`")
                 .action(ArgAction::Append)
                 .num_args(1),
@@ -79,21 +79,21 @@ fn main() {
 
     let matches = app.get_matches();
 
-    let enabled: HashSet<_> = match matches.get_many::<String>("enabled") {
-        Some(enabled) => enabled
+    let enable: HashSet<_> = match matches.get_many::<String>("enable") {
+        Some(enable) => enable
             .flat_map(|s| s.split(','))
             .map(|s| s.trim().as_bytes())
             .collect(),
         None => HashSet::new(),
     };
-    let disabled: HashSet<_> = match matches.get_many::<String>("disabled") {
-        Some(disabled) => disabled
+    let disable: HashSet<_> = match matches.get_many::<String>("disable") {
+        Some(disable) => disable
             .flat_map(|s| s.split(','))
             .map(|s| s.trim().as_bytes())
             .collect(),
         None => HashSet::new(),
     };
-    let keep = matches.get_flag("keep");
+    let keep = matches.get_flag("keep") || !disable.is_empty();
 
     let comment = {
         let primary = matches.get_one::<String>("comment").map(|s| s.as_bytes());
@@ -112,8 +112,8 @@ fn main() {
         corpl::process_file(
             Path::new(file),
             comment,
-            &enabled,
-            &disabled,
+            &enable,
+            &disable,
             keep,
             comment_len,
         );
