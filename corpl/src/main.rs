@@ -1,71 +1,113 @@
+use std::collections::HashSet;
 use std::path::Path;
 
-use clap::{self, App, Arg};
+use clap::{self, Arg, ArgAction, Command};
 
-mod lib;
-use lib::Comment;
+use corpl::Comment;
 
 fn main() {
-    let app = App::new("corpl")
+    let app = Command::new("corpl")
         .version("0.1.0")
         .author("Icelk <main@icelk.dev>")
         .about("Changes exposed values in config files")
-        .long_about("Changes exposed values in config files.\n\
-Tries to find the appropriate comment string (e.g. '#' and '//') in the first line. \
-A good practise for the first line to only contain the comment string.")
+        .long_about(
+            "Changes exposed values in config files.\n\
+            Tries to find the appropriate comment string (e.g. '#' and '//') in the first line. \
+            A good practise for the first line to only contain the comment string.",
+        )
         .arg(
-            Arg::with_name("CONFIG")
-                .help("Sets the config files to change. It is recommended to only use one config file per instance of this program, \
-since the `-c` option overrides all unrecognised comment strings.")
+            Arg::new("CONFIG")
+                .help(
+                    "Sets the config files to change. \
+                It is recommended to only use one config \
+                file per instance of this program, \
+                since the `-c` option overrides all \
+                unrecognised comment strings.",
+                )
                 .required(true)
-                .multiple(true),
+                .num_args(1..),
         )
         .arg(
-            Arg::with_name("enabled")
-            .help("Which section to enable. Can be multiple.")
-                .short("e")
+            Arg::new("enabled")
+                .help("Which section to enable. Can be multiple.")
+                .short('e')
                 .long("enabled")
-                .takes_value(true)
-                .multiple(true),
+                .num_args(1..),
         )
         .arg(
-            Arg::with_name("long-comment")
-            .help("Enables long comments. Must be used if comment string in file is greater than 4 bytes")
-                .short("l")
+            Arg::new("long-comment")
+                .help(
+                    "Enables long comments. Must be used if comment \
+                    string in file is greater than 4 bytes",
+                )
+                .short('l')
+                .action(ArgAction::SetTrue)
                 .long("long-comment"),
         )
         .arg(
-            Arg::with_name("c")
-            .help("Override comment string found in file. Can be used if the program failed to register it.")
-                .short("c")
+            Arg::new("comment")
+                .help(
+                    "Override comment string found in file. \
+                    Can be used if the program failed to register it.",
+                )
+                .short('c')
                 .long("comment")
-                .takes_value(true))
+                .num_args(1),
+        )
         .arg(
-            Arg::with_name("closing-comment")
+            Arg::new("closing-comment")
                 .help("An optional closing comment, for comments of type /* */")
                 .long("closing-comment")
-                .takes_value(true)
+                .num_args(1),
+        )
+        .arg(
+            Arg::new("keep")
+                .short('k')
+                .long("keep")
+                .action(ArgAction::SetTrue)
+                .help("Keep current settings"),
+        )
+        .arg(
+            Arg::new("disabled")
+                .short('d')
+                .long("disabled")
+                .help("Sections to explicitly disable. Implies `keep`")
+                .num_args(1..),
         );
 
     let matches = app.get_matches();
 
-    let enabled: Vec<&str> = match matches.values_of("enabled") {
-        Some(enabled) => enabled.collect(),
-        None => Vec::new(),
+    let enabled: HashSet<_> = match matches.get_many::<String>("enabled") {
+        Some(enabled) => enabled.map(|s| s.as_bytes()).collect(),
+        None => HashSet::new(),
     };
+    let disabled: HashSet<_> = match matches.get_many::<String>("disabled") {
+        Some(disabled) => disabled.map(|s| s.as_bytes()).collect(),
+        None => HashSet::new(),
+    };
+    let keep = matches.get_flag("keep");
 
     let comment = {
-        let primary = matches.value_of("c").map(str::as_bytes);
-        let closing = matches.value_of("closing-comment").map(str::as_bytes);
+        let primary = matches.get_one::<String>("comment").map(|s| s.as_bytes());
+        let closing = matches
+            .get_one::<String>("closing-comment")
+            .map(|s| s.as_bytes());
         Comment::maybe_whole(primary, closing)
     };
-    let comment_len = if matches.is_present("l") {
+    let comment_len = if matches.get_flag("long-comment") {
         None
     } else {
         Some(4)
     };
 
-    for file in matches.values_of("CONFIG").unwrap() {
-        lib::process_file(Path::new(file), comment, &enabled, comment_len);
+    for file in matches.get_many::<String>("CONFIG").unwrap() {
+        corpl::process_file(
+            Path::new(file),
+            comment,
+            &enabled,
+            &disabled,
+            keep,
+            comment_len,
+        );
     }
 }

@@ -45,10 +45,10 @@ fn main() {
         .map(Cow::Owned)
         .unwrap_or(Cow::Borrowed("\n"));
     let base = {
-        let b = if matches.opt_present("b") { 1 } else { 0 };
-        let h = if matches.opt_present("h") { 1 } else { 0 };
-        let d = if matches.opt_present("d") { 1 } else { 0 };
-        let r = if matches.opt_present("r") { 1 } else { 0 };
+        let b = u8::from(matches.opt_present("b"));
+        let h = u8::from(matches.opt_present("h"));
+        let d = u8::from(matches.opt_present("d"));
+        let r = u8::from(matches.opt_present("r"));
         if b + h + d + r > 1 {
             "Flag `binary`, `hex`, `decimal`, and `base` are exclusive. See --help for more info."
                 .print_exit()

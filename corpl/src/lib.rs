@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::{
     fs::OpenOptions,
     io::{Read, Seek, SeekFrom, Write},
@@ -23,17 +24,11 @@ impl<'a> Comment<'a> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum OptionEnabled {
     Yes,
     No,
-}
-impl OptionEnabled {
-    pub fn from_bool(b: bool) -> Self {
-        match b {
-            true => Self::Yes,
-            false => Self::No,
-        }
-    }
+    Ignore,
 }
 
 enum Segment<'a> {
@@ -45,9 +40,25 @@ enum Segment<'a> {
 pub fn process_file(
     path: &Path,
     comment: Option<Comment>,
-    enabled: &[&str],
+    enabled: &HashSet<&[u8]>,
+    disabled: &HashSet<&[u8]>,
+    keep: bool,
     max_comment_len: Option<usize>,
 ) {
+    let get_status = |option: &[u8]| {
+        if keep {
+            if disabled.contains(option) {
+                Some(false)
+            } else if enabled.contains(option) {
+                Some(true)
+            } else {
+                None
+            }
+        } else {
+            Some(enabled.contains(option))
+        }
+    };
+
     let mut file = match OpenOptions::new().read(true).write(true).open(path) {
         Ok(f) => f,
         Err(_) => "Failed to open config file. Check input path.".print_exit(),
@@ -69,7 +80,7 @@ pub fn process_file(
             None
         }
     }
-    let end_comment = comment.as_ref().map(Comment::close).flatten();
+    let end_comment = comment.as_ref().and_then(Comment::close);
     let comment = match get_common_comments(&config).or_else(|| comment.as_ref().map(Comment::open))
     {
         Some(c) => c,
@@ -144,27 +155,38 @@ pub fn process_file(
                 };
                 let option = &line_trimmed[start..end];
                 let options = common::slice_split(option, b" && ");
-                let mut option_enabled = true;
+                let mut option_enabled = OptionEnabled::Ignore;
                 for option in options {
                     let trimmed_option = option.strip_prefix(b"!").unwrap_or(option);
-                    let contains = enabled.iter().any(|e| e.as_bytes() == trimmed_option);
+                    let contains = get_status(trimmed_option);
                     let negate = option.starts_with(b"!");
+                    let Some(contains) = contains else { continue };
+
+                    if option_enabled == OptionEnabled::Ignore {
+                        option_enabled = OptionEnabled::Yes;
+                    }
                     if (negate && contains) || (!negate && !contains) {
-                        option_enabled = false;
+                        option_enabled = OptionEnabled::No;
                         break;
                     }
                 }
-                state = Segment::Option(OptionEnabled::from_bool(option_enabled));
+                state = Segment::Option(option_enabled);
             }
         } else {
             match state {
                 Segment::Section(seg_str) if !line_trimmed.is_empty() => {
                     if end_comment.is_none() {
                         let last = get_last(line, comment);
-                        let activate = enabled.iter().any(|e| Some(e.as_bytes()) == last);
+                        let activate = last.map_or(Some(false), |last| get_status(last));
+                        let Some(activate) = activate else {
+                            // return early
+                            output.extend_from_slice(line);
+                            output.extend_from_slice(line_ending);
+                            continue;
+                        };
                         let start = first_non_whitespace(line);
                         let currently_active = !(line[start..].starts_with(comment)
-                            && line[start + comment.len()] == 32);
+                            && line.get(start + comment.len()).copied() == Some(32));
 
                         if currently_active == activate {
                             // Do noting!
@@ -195,6 +217,9 @@ pub fn process_file(
                         !(line[start..].starts_with(comment) && line[start + comment.len()] == 32);
 
                     match enabled {
+                        OptionEnabled::Ignore => {
+                            // Do nothing
+                        }
                         OptionEnabled::Yes if currently_active => {
                             // Do nothing
                         }
