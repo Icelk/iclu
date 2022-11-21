@@ -3,6 +3,7 @@ use std::path::Path;
 
 use clap::{self, Arg, ArgAction, Command};
 
+use common::ExitDisplay;
 use corpl::Comment;
 
 fn main() {
@@ -108,14 +109,24 @@ fn main() {
         Some(4)
     };
 
+    let mut errors = vec![];
     for file in matches.get_many::<String>("CONFIG").unwrap() {
-        corpl::process_file(
+        if let Err(err) = corpl::process_file(
             Path::new(file),
             comment,
             &enable,
             &disable,
             keep,
             comment_len,
-        );
+        ) {
+            errors.push((err, file))
+        };
+    }
+    let last = errors.pop();
+    for (err, path) in errors {
+        eprintln!("{err} Error when processing {path}")
+    }
+    if let Some((err, path)) = last {
+        format!("{err} Error when processing {path}").print_exit()
     }
 }

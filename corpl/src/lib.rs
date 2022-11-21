@@ -1,11 +1,10 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::{
     fs::OpenOptions,
     io::{Read, Seek, SeekFrom, Write},
     path::Path,
 };
-
-use common::ExitDisplay;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Comment<'a> {
@@ -44,7 +43,7 @@ pub fn process_file(
     disabled: &HashSet<&[u8]>,
     keep: bool,
     max_comment_len: Option<usize>,
-) {
+) -> Result<(), Cow<'static, str>> {
     let get_status = |option: &[u8]| {
         if keep {
             if disabled.contains(option) {
@@ -61,11 +60,15 @@ pub fn process_file(
 
     let mut file = match OpenOptions::new().read(true).write(true).open(path) {
         Ok(f) => f,
-        Err(_) => "Failed to open config file. Check input path.".print_exit(),
+        Err(_) => {
+            return Err(Cow::Borrowed(
+                "Failed to open config file. Check input path.",
+            ))
+        }
     };
     let mut config = Vec::with_capacity(4096);
     if file.read_to_end(&mut config).is_err() {
-        "Failed to read file.".print_exit()
+        return Err(Cow::Borrowed("Failed to read file."));
     };
     let line_ending = get_line_ending(&config);
     let mut lines = get_lines(&config).peekable();
@@ -87,7 +90,11 @@ pub fn process_file(
         None => {
             let first_line = match lines.peek() {
                 Some(l) => *l,
-                None => "File too short; could not determine comment character.".print_exit(),
+                None => {
+                    return Err(Cow::Borrowed(
+                        "File too short; could not determine comment character.",
+                    ))
+                }
             };
             if max_comment_len.is_none()
                 || first_line
@@ -104,8 +111,7 @@ pub fn process_file(
                 );
                 comment
             } else {
-                format!("Failed to get comment string in {}. Please enter it, and only it, as the first line or supply the `-c` option with the comment string.", path.display())
-                    .print_exit()
+                return Err(Cow::Owned(format!("Failed to get comment string in {}. Please enter it, and only it, as the first line or supply the `-c` option with the comment string.", path.display())));
             }
         }
     };
@@ -269,15 +275,15 @@ pub fn process_file(
     }
     match file.set_len(output.len() as u64) {
         Ok(_) => {}
-        Err(_) => "Failed to set file length.".print_exit(),
+        Err(_) => return Err(Cow::Borrowed("Failed to set file length.")),
     };
     match file.seek(SeekFrom::Start(0)) {
         Ok(_) => {}
-        Err(_) => "Failed to seek in file.".print_exit(),
+        Err(_) => return Err(Cow::Borrowed("Failed to seek in file.")),
     }
     match file.write_all(&output[..]) {
-        Ok(_) => {}
-        Err(_) => "Failed to write to file.".print_exit(),
+        Ok(_) => Ok(()),
+        Err(_) => return Err(Cow::Borrowed("Failed to write to file.")),
     }
 }
 
