@@ -11,7 +11,7 @@ use std::{borrow::Cow, env, io, io::prelude::*};
 pub fn print_usage(program: &str, opts: Options) -> ! {
     let brief = format!("Usage: {prog} RANGE... [options]\n\n\
 RANGE defines which ranges to randomise integers in.\n\
-They should not be overlapping or outside the range of a 64-bit integer.\n\
+They should not be overlapping or outside the range of a 128-bit signed integer.\n\
 They can be comma- or space separated, contain a starting and ending number with a hyphen in between \
 (e.g. '3..5,7..11' is equivalent to '3..5,  7..11')\n\
 If you want negative numbers, make sure to include -- before the ranges \
@@ -19,10 +19,10 @@ If you want negative numbers, make sure to include -- before the ranges \
 \n\
 Several hard-coded ranges are present.\n\
 ascii -> 32..127\n\
-ascii-ext -> [32..127), [128..255)\n\
+ascii-ext -> [32..127), [160..256)\n\
 alphabet | letters | [a-zA-Z] -> [65, 91), [97, 123)\n\
-[a-z] -> [97, 123)\n\
-[A-Z] -> [65, 91)\n\
+capitals | uppercase | majuscule | [a-z] -> [97, 123)\n\
+lowercase | minuscule | [A-Z] -> [65, 91)\n\
 numbers | [0-9] -> [48, 58)\n\
 password -> 33, [35..37], [39, 41], [43, 58], [63, 123], [125, 126]\n\
 i8 -> [-128..128)\n\
@@ -31,29 +31,28 @@ i16 -> [-32768..32768)\n\
 u16 -> [0..65536)\n\
 i32 -> [-2147483648..2147483648)\n\
 u32 -> [0..4294967296)\n\
-i64 -> [-9223372036854775808..9223372036854775807) // Has to be one smaller than max because of the representation.\n\
-u64 -> [0..9223372036854775807) // Not 2^64 since it's represented as an signed 64-bit integer.\n\
-", prog=program,);
+i64 -> [-9223372036854775808..9223372036854775808)\n\
+u64 -> [0..18446744073709551616)", prog=program,);
     let usage = opts.usage(&brief);
     usage.print_exit()
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 struct Range {
-    from: i64,
-    to: i64,
+    from: i128,
+    to: i128,
 }
 impl Range {
     /// Creates a range `[from..to)`
-    pub const fn new(from: i64, to: i64) -> Range {
+    pub const fn new(from: i128, to: i128) -> Range {
         Range { from, to }
     }
     /// Creates a range `[from..to]`
-    pub const fn new_inclusive(from: i64, to: i64) -> Range {
+    pub const fn new_inclusive(from: i128, to: i128) -> Range {
         Range { from, to: to + 1 }
     }
     /// Creates a range of a single number. Same as `new(value, value + 1)`.
-    pub const fn single(value: i64) -> Range {
+    pub const fn single(value: i128) -> Range {
         Range {
             from: value,
             to: value + 1,
@@ -63,7 +62,7 @@ impl Range {
         other.to > self.from && other.from < self.to
     }
 
-    pub fn difference(&self) -> i64 {
+    pub fn count(&self) -> i128 {
         self.to - self.from
     }
 }
@@ -141,7 +140,8 @@ impl ExitDisplay for RangeError {
             RangeError::Backwards => "The range is entered backwards.",
             RangeError::Syntax => "The syntax is wrong. See the usage (--help).",
             RangeError::InvalidInteger => {
-                "The intager is invalid. Make sure no other characters than 0-9 are present and the integer is inside the range of 64 bits."
+                "The intager is invalid. Make sure no other characters than 0-9 \
+                are present and the integer is inside the range of 64 bits."
             }
             RangeError::Intersecting => "Two or more ranges are intersecting.",
         };
@@ -151,12 +151,12 @@ impl ExitDisplay for RangeError {
 
 fn parse_ranges<'a, I: Iterator<Item = &'a str>>(ranges: I) -> Vec<Range> {
     ranges
-        .map(|s| match s.trim() {
+        .flat_map(|s| match s.trim() {
             "ascii" => vec![Range::new(32, 127)],
-            "ascii-ext" => vec![Range::new(32, 127), Range::new(128, 255)],
+            "ascii-ext" => vec![Range::new(32, 127), Range::new(160, 256)],
             "alphabet" | "letters" | "[a-zA-Z]" => vec![Range::new(65, 91), Range::new(97, 123)],
-            "[a-z]" => vec![Range::new(97, 123)],
-            "[A-Z]" => vec![Range::new(65, 91)],
+            "capitals" | "uppercase" | "majuscule" | "[a-z]" => vec![Range::new(97, 123)],
+            "lowercase" | "minuscule" | "[A-Z]" => vec![Range::new(65, 91)],
             "numbers" | "[0-9]" => vec![Range::new(48, 58)],
             "password" => vec![
                 Range::single(33),
@@ -172,28 +172,29 @@ fn parse_ranges<'a, I: Iterator<Item = &'a str>>(ranges: I) -> Vec<Range> {
             "u16" => vec![Range::new(0, 65536)],
             "i32" => vec![Range::new(-2147483648, 2147483648)],
             "u32" => vec![Range::new(0, 4294967296)],
-            "i64" => vec![Range::new(-9223372036854775808, 9223372036854775807)], // Has to be one smaller than max because of the representation.
-            "u64" => vec![Range::new(0, 9223372036854775807)], // Not 2^64 since it's represented as an signed 64-bit integer.
+            "i64" => vec![Range::new(-9223372036854775808, 9223372036854775808)],
+            "u64" => vec![Range::new(0, 18446744073709551615)],
 
             _ => match s.parse::<Range>() {
                 Err(e) => e.print_exit(),
                 Ok(r) => vec![r],
             },
         })
-        .flatten()
         .collect()
 }
 
 /// Returns the `value` clamped to the ranges.
-/// `value` is assumed to be zero-indexed and have a maximum of `ranges.fold(0, |acc, r| r.difference() + acc)` Will else return -1.
-/// `ranges` are assumed to be in order, with the smallest first. This does however not matter when the `value` is random.
-fn clamp_to_ranges(value: i64, ranges: &[Range]) -> i64 {
+/// `value` is assumed to be zero-indexed and have a
+/// maximum of `ranges.fold(0, |acc, r| r.difference() + acc)` Will else return -1.
+/// `ranges` are assumed to be in order, with the smallest first.
+/// This does however not matter when the `value` is random.
+fn clamp_to_ranges(value: i128, ranges: &[Range]) -> i128 {
     let mut left = value;
     for range in ranges {
-        if left - range.difference() < 0 {
+        if left - range.count() < 0 {
             return left + range.from;
         } else {
-            left -= range.difference();
+            left -= range.count();
         }
     }
     -1
@@ -238,8 +239,7 @@ fn main() {
         matches
             .free
             .iter()
-            .map(|a| a.split(","))
-            .flatten()
+            .flat_map(|a| a.split(','))
             .filter(|s| !s.trim().is_empty()),
     );
 
@@ -254,34 +254,68 @@ fn main() {
         }
     }
 
-    let total = ranges.iter().fold(0, |acc, r| acc + r.difference());
+    let total = ranges.iter().fold(0, |acc, r| acc + r.count());
 
     let mut rng = thread_rng();
 
-    let range = Uniform::new(0, total);
+    fn get_numbers(
+        mut sample: impl FnMut() -> i128,
+        amount: usize,
+        ranges: &[Range],
+        separator: Cow<str>,
+    ) -> String {
+        (0..amount)
+            .into_iter()
+            .map(|_| clamp_to_ranges(sample(), ranges))
+            .fold(String::with_capacity(512), |mut s, n| {
+                if !s.is_empty() {
+                    s.push_str(separator.as_ref());
+                }
+                s.push_str(format!("{}", n).as_str());
+                s
+            })
+    }
 
-    let numbers = (0..amount)
-        .into_iter()
-        .map(|_| clamp_to_ranges(range.sample(&mut rng), &ranges))
-        .fold(String::with_capacity(512), |mut s, n| {
-            if !s.is_empty() {
-                s.push_str(separator.as_ref());
-            }
-            s.push_str(format!("{}", n).as_str());
-            s
-        });
+    let numbers = if let Ok(u) = u16::try_from(total) {
+        let range = Uniform::new(0, u);
+        get_numbers(
+            || range.sample(&mut rng) as i128,
+            amount,
+            &ranges,
+            separator,
+        )
+    } else if let Ok(u) = u32::try_from(total) {
+        let range = Uniform::new(0, u);
+        get_numbers(
+            || range.sample(&mut rng) as i128,
+            amount,
+            &ranges,
+            separator,
+        )
+    } else if let Ok(u) = u64::try_from(total) {
+        let range = Uniform::new(0, u);
+        get_numbers(
+            || range.sample(&mut rng) as i128,
+            amount,
+            &ranges,
+            separator,
+        )
+    } else {
+        let range = Uniform::new(0, total);
+        get_numbers(|| range.sample(&mut rng), amount, &ranges, separator)
+    };
 
     // println!(
     //     "Ranges: {:?}! Total {} number: {} separator {:?}",
     //     &ranges, total, amount, separator
     // );
     let mut stdout = io::stdout();
-    match stdout
+    if stdout
         .write_all(numbers.as_bytes())
         .and(stdout.write(b"\n"))
         .and(stdout.flush())
+        .is_err()
     {
-        Err(_) => "Failed to write to stdout.".print_exit(),
-        Ok(()) => (),
+        "Failed to write to stdout.".print_exit()
     }
 }

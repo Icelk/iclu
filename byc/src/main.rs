@@ -62,7 +62,7 @@ fn main() {
         } else {
             match matches.opt_get_default("r", 10) {
                 Err(_) => "Failed to parse custom base.".print_exit(),
-                Ok(b) if b < 2 || b > 36 => "Base is not in range 2-36.".print_exit(),
+                Ok(b) if !(2..=36).contains(&b) => "Base is not in range 2-36.".print_exit(),
                 Ok(b) => b,
             }
         }
@@ -101,12 +101,12 @@ fn main() {
     }
 
     let mut stdout = io::stdout();
-    match stdout
+    if stdout
         .write_all(chars.as_bytes())
         .and(stdout.write(b"\n"))
         .and(stdout.flush())
+        .is_err()
     {
-        Err(_) => "Failed to write to stdout.".print_exit(),
-        Ok(()) => (),
+        "Failed to write to stdout.".print_exit()
     }
 }

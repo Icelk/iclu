@@ -8,7 +8,6 @@ use std::{
 
 use clap::{self, App, Arg, ArgGroup};
 use common::ExitDisplay;
-use shell2batch;
 
 fn main() {
     let app = App::new("shc")
